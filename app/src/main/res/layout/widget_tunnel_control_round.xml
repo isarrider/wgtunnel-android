@@ -1,13 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Mimics a round launcher icon: circle on top, label directly underneath -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/widget_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
     <!-- Wraps its content and is centered, so the label hugs the circle instead of sinking to
-         the bottom of tall cells (where launchers also clip it with rounded corners). -->
+         the bottom of tall cells.
+
+         The @android:id/background + clipToOutline pair is the Android 12+ opt-out from the
+         launcher's rounded-corner clipping. This widget draws its own shape, and that clipping
+         cuts off the ends of the label. -->
     <LinearLayout
+        android:id="@android:id/background"
+        android:clipToOutline="true"
+        tools:targetApi="31"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_gravity="center"
