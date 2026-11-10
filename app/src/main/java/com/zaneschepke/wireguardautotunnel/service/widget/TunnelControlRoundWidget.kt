@@ -4,8 +4,9 @@ import android.widget.RemoteViews
 import com.zaneschepke.wireguardautotunnel.R
 
 /**
- * Circular variant of [TunnelControlWidget], for home screens with round app icons. The circle is
- * an ImageView scaled with fitCenter, so it stays round whatever the cell's aspect ratio.
+ * Circular variant of [TunnelControlWidget], for home screens with round app icons. It mimics a
+ * launcher icon: a circle with the label underneath. The circle is an ImageView scaled with
+ * fitCenter, so it stays round whatever the cell's aspect ratio.
  */
 class TunnelControlRoundWidget : TunnelControlWidget() {
 
