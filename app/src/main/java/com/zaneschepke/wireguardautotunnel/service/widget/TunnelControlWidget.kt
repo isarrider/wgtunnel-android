@@ -7,6 +7,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.widget.RemoteViews
+import androidx.annotation.DrawableRes
 import com.zaneschepke.wireguardautotunnel.R
 import com.zaneschepke.wireguardautotunnel.core.orchestration.TunnelCoordinator
 import com.zaneschepke.wireguardautotunnel.di.Scope
@@ -25,8 +26,11 @@ import org.koin.core.qualifier.named
 import timber.log.Timber
 
 /**
- * Home screen widget that shows the current tunnel state and toggles tunnels on tap, using the
+ * 1x1 home screen widget that shows the current tunnel state and toggles tunnels on tap, using the
  * same logic as the Quick Settings tile ([TunnelCoordinator.toggleActiveTunnels]).
+ *
+ * The label shows the active tunnel name (or "Off"); the background color shows the connection
+ * state: green when connected, yellow while connecting, red on handshake failure.
  */
 class TunnelControlWidget : AppWidgetProvider(), KoinComponent {
 
@@ -65,20 +69,12 @@ class TunnelControlWidget : AppWidgetProvider(), KoinComponent {
 
         when {
             tunnels.isNullOrEmpty() -> {
-                views.setInt(
-                    R.id.widget_root,
-                    "setBackgroundResource",
-                    R.drawable.widget_background_inactive,
-                )
-                views.setImageViewResource(R.id.widget_icon, R.drawable.vpn_off)
-                views.setTextViewText(R.id.widget_title, context.getString(R.string.tunnel_control))
-                views.setTextViewText(
-                    R.id.widget_subtitle,
-                    context.getString(R.string.widget_no_tunnels),
-                )
-                views.setContentDescription(
-                    R.id.widget_root,
-                    context.getString(R.string.widget_no_tunnels),
+                val description = context.getString(R.string.widget_no_tunnels)
+                views.bind(
+                    background = R.drawable.widget_background_inactive,
+                    icon = R.drawable.vpn_off,
+                    label = context.getString(R.string.widget_off),
+                    description = description,
                 )
                 // Nothing to toggle, so open the app instead.
                 views.setOnClickPendingIntent(R.id.widget_root, openAppPendingIntent(context))
@@ -86,45 +82,41 @@ class TunnelControlWidget : AppWidgetProvider(), KoinComponent {
 
             active.isNotEmpty() -> {
                 val activeConfigs = tunnels.filter { active.containsKey(it.id) }
-                val title: String
-                val subtitle: String
-                if (activeConfigs.size == 1) {
-                    val tunnel = activeConfigs.first()
-                    title = tunnel.name
-                    subtitle =
-                        DisplayTunnelState.from(active.getValue(tunnel.id))
-                            .asLocalizedString(context)
-                } else {
-                    val tunnelsLabel =
-                        context.getString(R.string.tunnels).lowercase(Locale.getDefault())
-                    title = "${active.size} $tunnelsLabel"
-                    subtitle = context.getString(R.string.tunnel_state_connected)
-                }
-                views.setInt(
-                    R.id.widget_root,
-                    "setBackgroundResource",
-                    R.drawable.widget_background_active,
+                val states = active.values.map { DisplayTunnelState.from(it) }
+                val label =
+                    if (activeConfigs.size == 1) {
+                        activeConfigs.first().name
+                    } else {
+                        val tunnelsLabel =
+                            context.getString(R.string.tunnels).lowercase(Locale.getDefault())
+                        "${active.size} $tunnelsLabel"
+                    }
+                // Show the "worst" state across active tunnels.
+                val state =
+                    when {
+                        states.any { it == DisplayTunnelState.HandshakeFailure } ->
+                            DisplayTunnelState.HandshakeFailure
+                        states.any { it != DisplayTunnelState.Connected } ->
+                            states.first { it != DisplayTunnelState.Connected }
+                        else -> DisplayTunnelState.Connected
+                    }
+                views.bind(
+                    background = backgroundFor(state),
+                    icon = R.drawable.vpn_on,
+                    label = label,
+                    description = "$label • ${state.asLocalizedString(context)}",
                 )
-                views.setImageViewResource(R.id.widget_icon, R.drawable.vpn_on)
-                views.setTextViewText(R.id.widget_title, title)
-                views.setTextViewText(R.id.widget_subtitle, subtitle)
-                views.setContentDescription(R.id.widget_root, "$title • $subtitle")
                 views.setOnClickPendingIntent(R.id.widget_root, togglePendingIntent(context))
             }
 
             else -> {
-                val subtitle = context.getString(R.string.tunnel_state_disconnected)
-                views.setInt(
-                    R.id.widget_root,
-                    "setBackgroundResource",
-                    R.drawable.widget_background_inactive,
-                )
-                views.setImageViewResource(R.id.widget_icon, R.drawable.vpn_off)
-                views.setTextViewText(R.id.widget_title, context.getString(R.string.tunnel_control))
-                views.setTextViewText(R.id.widget_subtitle, subtitle)
-                views.setContentDescription(
-                    R.id.widget_root,
-                    "${context.getString(R.string.tunnel_control)} • $subtitle",
+                views.bind(
+                    background = R.drawable.widget_background_inactive,
+                    icon = R.drawable.vpn_off,
+                    label = context.getString(R.string.widget_off),
+                    description =
+                        "${context.getString(R.string.tunnel_control)} • " +
+                            context.getString(R.string.tunnel_state_disconnected),
                 )
                 views.setOnClickPendingIntent(R.id.widget_root, togglePendingIntent(context))
             }
@@ -132,6 +124,28 @@ class TunnelControlWidget : AppWidgetProvider(), KoinComponent {
 
         appWidgetManager.updateAppWidget(appWidgetIds, views)
     }
+
+    private fun RemoteViews.bind(
+        @DrawableRes background: Int,
+        @DrawableRes icon: Int,
+        label: String,
+        description: String,
+    ) {
+        setInt(R.id.widget_root, "setBackgroundResource", background)
+        setImageViewResource(R.id.widget_icon, icon)
+        setTextViewText(R.id.widget_title, label)
+        setContentDescription(R.id.widget_root, description)
+    }
+
+    @DrawableRes
+    private fun backgroundFor(state: DisplayTunnelState): Int =
+        when (state) {
+            DisplayTunnelState.Connected -> R.drawable.widget_background_active
+            DisplayTunnelState.HandshakeFailure -> R.drawable.widget_background_error
+            DisplayTunnelState.ResolvingDns,
+            DisplayTunnelState.EstablishingConnection -> R.drawable.widget_background_pending
+            DisplayTunnelState.Disconnected -> R.drawable.widget_background_inactive
+        }
 
     private fun togglePendingIntent(context: Context): PendingIntent =
         PendingIntent.getBroadcast(
