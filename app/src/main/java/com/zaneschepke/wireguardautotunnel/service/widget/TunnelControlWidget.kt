@@ -29,8 +29,9 @@ import timber.log.Timber
  * 1x1 home screen widget that shows the current tunnel state and toggles tunnels on tap, using the
  * same logic as the Quick Settings tile ([TunnelCoordinator.toggleActiveTunnels]).
  *
- * The label shows the active tunnel name (or "Off"); the background color shows the connection
- * state: green when connected, yellow while connecting, red on handshake failure.
+ * The label shows the active tunnel name, or when off, the tunnel a tap will start. The background
+ * color shows the connection state: green when connected, yellow while connecting, red on
+ * handshake failure, dark when off.
  */
 class TunnelControlWidget : AppWidgetProvider(), KoinComponent {
 
@@ -110,13 +111,25 @@ class TunnelControlWidget : AppWidgetProvider(), KoinComponent {
             }
 
             else -> {
+                // Name what a tap will start, falling back to "Off" if nothing would start.
+                val next = tunnelCoordinator.tunnelsToStartOnToggle()
+                val label =
+                    when (next.size) {
+                        0 -> context.getString(R.string.widget_off)
+                        1 -> next.first().name
+                        else -> {
+                            val tunnelsLabel =
+                                context.getString(R.string.tunnels).lowercase(Locale.getDefault())
+                            "${next.size} $tunnelsLabel"
+                        }
+                    }
+                val name = if (next.isEmpty()) context.getString(R.string.tunnel_control) else label
                 views.bind(
                     background = R.drawable.widget_background_inactive,
                     icon = R.drawable.vpn_off,
-                    label = context.getString(R.string.widget_off),
+                    label = label,
                     description =
-                        "${context.getString(R.string.tunnel_control)} • " +
-                            context.getString(R.string.tunnel_state_disconnected),
+                        "$name • ${context.getString(R.string.tunnel_state_disconnected)}",
                 )
                 views.setOnClickPendingIntent(R.id.widget_root, togglePendingIntent(context))
             }
